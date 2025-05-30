@@ -609,6 +609,28 @@ func (s *Redis) GetBitCtx(ctx context.Context, key string, offset int64) (int, e
 	return int(v), nil
 }
 
+// GetDel is the implementation of redis getdel command.
+// Available since: redis version 6.2.0
+func (s *Redis) GetDel(key string) (string, error) {
+	return s.GetDelCtx(context.Background(), key)
+}
+
+// GetDelCtx is the implementation of redis getdel command.
+// Available since: redis version 6.2.0
+func (s *Redis) GetDelCtx(ctx context.Context, key string) (string, error) {
+	conn, err := getRedis(s)
+	if err != nil {
+		return "", err
+	}
+
+	val, err := conn.GetDel(ctx, key).Result()
+	if errors.Is(err, red.Nil) {
+		return "", nil
+	}
+
+	return val, err
+}
+
 // GetSet is the implementation of redis getset command.
 func (s *Redis) GetSet(key, value string) (string, error) {
 	return s.GetSetCtx(context.Background(), key, value)
@@ -2409,6 +2431,13 @@ func SetSlowThreshold(threshold time.Duration) {
 	slowThreshold.Set(threshold)
 }
 
+// WithHook customizes the given Redis with given durationHook.
+func WithHook(hook Hook) Option {
+	return func(r *Redis) {
+		r.hooks = append(r.hooks, hook)
+	}
+}
+
 // WithPass customizes the given Redis with given password.
 func WithUser(user string) Option {
 	return func(r *Redis) {
@@ -2430,11 +2459,10 @@ func WithTLS() Option {
 	}
 }
 
-// WithHook customizes the given Redis with given durationHook, only for private use now,
-// maybe expose later.
-func WithHook(hook Hook) Option {
+// WithUser customizes the given Redis with given username.
+func WithUser(user string) Option {
 	return func(r *Redis) {
-		r.hooks = append(r.hooks, hook)
+		r.User = user
 	}
 }
 

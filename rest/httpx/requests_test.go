@@ -160,7 +160,7 @@ func TestParseFormArray(t *testing.T) {
 			http.NoBody)
 		assert.NoError(t, err)
 		if assert.NoError(t, Parse(r, &v)) {
-			assert.ElementsMatch(t, []string{"1", "2", "3"}, v.Names)
+			assert.ElementsMatch(t, []string{"1,2,3"}, v.Names)
 		}
 	})
 
@@ -189,9 +189,7 @@ func TestParseFormArray(t *testing.T) {
 			"/a?numbers=1,2,3",
 			http.NoBody)
 		assert.NoError(t, err)
-		if assert.NoError(t, Parse(r, &v)) {
-			assert.ElementsMatch(t, []int{1, 2, 3}, v.Numbers)
-		}
+		assert.Error(t, Parse(r, &v))
 	})
 
 	t.Run("slice with one value on array format brackets", func(t *testing.T) {
@@ -266,6 +264,36 @@ func TestParseFormArray(t *testing.T) {
 		assert.NoError(t, err)
 		if assert.NoError(t, Parse(r, &v)) {
 			assert.ElementsMatch(t, []float64{2}, v.Numbers)
+		}
+	})
+
+	t.Run("slice with one value", func(t *testing.T) {
+		var v struct {
+			Codes []string `form:"codes"`
+		}
+
+		r, err := http.NewRequest(
+			http.MethodGet,
+			"/a?codes=aaa,bbb,ccc",
+			http.NoBody)
+		assert.NoError(t, err)
+		if assert.NoError(t, Parse(r, &v)) {
+			assert.ElementsMatch(t, []string{"aaa,bbb,ccc"}, v.Codes)
+		}
+	})
+
+	t.Run("slice with multiple values", func(t *testing.T) {
+		var v struct {
+			Codes []string `form:"codes,arrayComma=false"`
+		}
+
+		r, err := http.NewRequest(
+			http.MethodGet,
+			"/a?codes=aaa,bbb,ccc&codes=ccc,ddd,eee",
+			http.NoBody)
+		assert.NoError(t, err)
+		if assert.NoError(t, Parse(r, &v)) {
+			assert.ElementsMatch(t, []string{"aaa,bbb,ccc", "ccc,ddd,eee"}, v.Codes)
 		}
 	})
 }
@@ -448,7 +476,7 @@ func TestParseJsonBody(t *testing.T) {
 
 		body := `{"name":"kevin", "age": 18}`
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 
 		if assert.NoError(t, Parse(r, &v)) {
 			assert.Equal(t, "kevin", v.Name)
@@ -464,7 +492,7 @@ func TestParseJsonBody(t *testing.T) {
 
 		body := `{"name":"kevin", "ag": 18}`
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 
 		assert.Error(t, Parse(r, &v))
 	})
@@ -489,7 +517,7 @@ func TestParseJsonBody(t *testing.T) {
 
 		body := `[{"name":"kevin", "age": 18}]`
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 
 		assert.NoError(t, Parse(r, &v))
 		assert.Equal(t, 1, len(v))
@@ -509,7 +537,7 @@ func TestParseJsonBody(t *testing.T) {
 
 		body := `[{"name":"apple", "age": 18}]`
 		r := httptest.NewRequest(http.MethodPost, "/a?product=tree", strings.NewReader(body))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 
 		assert.NoError(t, Parse(r, &v))
 		assert.Equal(t, 1, len(v))
@@ -527,7 +555,7 @@ func TestParseJsonBody(t *testing.T) {
 		body, _ := json.Marshal(v1)
 		t.Logf("body:%s", string(body))
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(body)))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 		var v2 v
 		err := ParseJsonBody(r, &v2)
 		if assert.NoError(t, err) {
@@ -581,7 +609,7 @@ func TestParseHeaders(t *testing.T) {
 	request.Header.Add("addrs", "addr2")
 	request.Header.Add("X-Forwarded-For", "10.0.10.11")
 	request.Header.Add("x-real-ip", "10.0.11.10")
-	request.Header.Add("Accept", header.JsonContentType)
+	request.Header.Add("Accept", header.ContentTypeJson)
 	err = ParseHeaders(request, &v)
 	if err != nil {
 		t.Fatal(err)
@@ -591,7 +619,7 @@ func TestParseHeaders(t *testing.T) {
 	assert.Equal(t, []string{"addr1", "addr2"}, v.Addrs)
 	assert.Equal(t, "10.0.10.11", v.XForwardedFor)
 	assert.Equal(t, "10.0.11.10", v.XRealIP)
-	assert.Equal(t, header.JsonContentType, v.Accept)
+	assert.Equal(t, header.ContentTypeJson, v.Accept)
 }
 
 func TestParseHeaders_Error(t *testing.T) {
@@ -683,7 +711,7 @@ func TestParseWithFloatPtr(t *testing.T) {
 		}
 		body := `{"weightFloat32": 3.2}`
 		r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-		r.Header.Set(ContentType, header.JsonContentType)
+		r.Header.Set(ContentType, header.ContentTypeJson)
 
 		if assert.NoError(t, Parse(r, &v)) {
 			assert.Equal(t, float32(3.2), *v.WeightFloat32)
@@ -731,6 +759,22 @@ func TestParseJsonStringRequest(t *testing.T) {
 		assert.NoError(t, Parse(r, &v))
 		assert.Equal(t, 2, len(v.GoodsList))
 		assert.ElementsMatch(t, []int64{11, 22}, []int64{v.GoodsList[0].Sku, v.GoodsList[1].Sku})
+	})
+}
+
+type valid1 struct{}
+
+func (v valid1) Validate(*http.Request, any) error { return nil }
+
+type valid2 struct{}
+
+func (v valid2) Validate(*http.Request, any) error { return nil }
+
+func TestSetValidatorTwice(t *testing.T) {
+	// panic: sync/atomic: store of inconsistently typed value into Value
+	assert.NotPanics(t, func() {
+		SetValidator(valid1{})
+		SetValidator(valid2{})
 	})
 }
 

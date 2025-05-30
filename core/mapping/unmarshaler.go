@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -15,11 +16,9 @@ import (
 	"github.com/zeromicro/go-zero/core/jsonx"
 	"github.com/zeromicro/go-zero/core/lang"
 	"github.com/zeromicro/go-zero/core/proc"
-	"github.com/zeromicro/go-zero/core/stringx"
 )
 
 const (
-	comma            = ","
 	defaultKeyName   = "key"
 	delimiter        = '.'
 	ignoreKey        = "-"
@@ -38,7 +37,6 @@ var (
 	defaultCacheLock    sync.Mutex
 	emptyMap            = map[string]any{}
 	emptyValue          = reflect.ValueOf(lang.Placeholder)
-	stringSliceType     = reflect.TypeOf([]string{})
 )
 
 type (
@@ -150,10 +148,6 @@ func (u *Unmarshaler) fillSlice(fieldType reflect.Type, value reflect.Value,
 	if refValue.Len() == 0 {
 		value.Set(reflect.MakeSlice(reflect.SliceOf(baseType), 0, 0))
 		return nil
-	}
-
-	if u.opts.fromArray {
-		refValue = makeStringSlice(refValue)
 	}
 
 	var valid bool
@@ -900,7 +894,7 @@ func (u *Unmarshaler) processNamedFieldWithValueFromString(fieldType reflect.Typ
 				valueKind.String())
 		}
 
-		if !stringx.Contains(options, checkValue) {
+		if !slices.Contains(options, checkValue) {
 			return fmt.Errorf(`value "%s" for field %q is not defined in options "%v"`,
 				mapValue, key, options)
 		}
@@ -1187,35 +1181,6 @@ func join(elem ...string) string {
 	}
 
 	return builder.String()
-}
-
-func makeStringSlice(refValue reflect.Value) reflect.Value {
-	if refValue.Len() != 1 {
-		return refValue
-	}
-
-	element := refValue.Index(0)
-	if element.Kind() != reflect.String {
-		return refValue
-	}
-
-	val, ok := element.Interface().(string)
-	if !ok {
-		return refValue
-	}
-
-	splits := strings.Split(val, comma)
-	if len(splits) <= 1 {
-		return refValue
-	}
-
-	slice := reflect.MakeSlice(stringSliceType, len(splits), len(splits))
-	for i, split := range splits {
-		// allow empty strings
-		slice.Index(i).Set(reflect.ValueOf(split))
-	}
-
-	return slice
 }
 
 func newInitError(name string) error {
